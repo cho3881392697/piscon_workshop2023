@@ -1698,34 +1698,25 @@ func postShipDone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	var ssrStatus string
-	go func() {
-		ssr, err := APIShipmentStatus(getShipmentServiceURL(), &APIShipmentStatusReq{
-			ReserveID: shipping.ReserveID,
-		})
-		if err != nil {
-			log.Print(err)
-			outputErrorMsg(w, http.StatusInternalServerError, "failed to request to shipment service")
-			tx.Rollback()
+	ssr, err := APIShipmentStatus(getShipmentServiceURL(), &APIShipmentStatusReq{
+		ReserveID: shipping.ReserveID,
+	})
+	if err != nil {
+		log.Print(err)
+		outputErrorMsg(w, http.StatusInternalServerError, "failed to request to shipment service")
+		tx.Rollback()
 
-			return
-		}
+		return
+	}
 
-		ssrStatus = ssr.Status
-		wg.Done()
-	}()
-	wg.Wait()
-
-	if !(ssrStatus == ShippingsStatusShipping || ssrStatus == ShippingsStatusDone) {
+	if !(ssr.Status == ShippingsStatusShipping || ssr.Status == ShippingsStatusDone) {
 		outputErrorMsg(w, http.StatusForbidden, "shipment service側で配送中か配送完了になっていません")
 		tx.Rollback()
 		return
 	}
 
 	_, err = tx.Exec("UPDATE `shippings` SET `status` = ?, `updated_at` = ? WHERE `transaction_evidence_id` = ?",
-		ssrStatus,
+		ssr.Status,
 		time.Now(),
 		transactionEvidence.ID,
 	)
@@ -1847,26 +1838,18 @@ func postComplete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var ssrStatus string
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		ssr, err := APIShipmentStatus(getShipmentServiceURL(), &APIShipmentStatusReq{
-			ReserveID: shipping.ReserveID,
-		})
-		if err != nil {
-			log.Print(err)
-			outputErrorMsg(w, http.StatusInternalServerError, "failed to request to shipment service")
-			tx.Rollback()
+	ssr, err := APIShipmentStatus(getShipmentServiceURL(), &APIShipmentStatusReq{
+		ReserveID: shipping.ReserveID,
+	})
+	if err != nil {
+		log.Print(err)
+		outputErrorMsg(w, http.StatusInternalServerError, "failed to request to shipment service")
+		tx.Rollback()
 
-			return
-		}
-		ssrStatus = ssr.Status
-		wg.Done()
-	}()
-	wg.Wait()
+		return
+	}
 
-	if !(ssrStatus == ShippingsStatusDone) {
+	if !(ssr.Status == ShippingsStatusDone) {
 		outputErrorMsg(w, http.StatusBadRequest, "shipment service側で配送完了になっていません")
 		tx.Rollback()
 		return
