@@ -2,7 +2,6 @@ package main
 
 import (
 	_ "net/http/pprof"
-	"sync"
 
 	crand "crypto/rand"
 	"database/sql"
@@ -922,18 +921,15 @@ func getTransactions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	itemDetails := []ItemDetail{}
-	wg := sync.WaitGroup{}
 	for _, item := range items {
 		seller, err := getUserSimpleByID(tx, item.SellerID)
 		if err != nil {
 			outputErrorMsg(w, http.StatusNotFound, "seller not found")
-			tx.Rollback()
 			return
 		}
 		category, err := getCategoryByID(tx, item.CategoryID)
 		if err != nil {
 			outputErrorMsg(w, http.StatusNotFound, "category not found")
-			tx.Rollback()
 			return
 		}
 
@@ -960,7 +956,6 @@ func getTransactions(w http.ResponseWriter, r *http.Request) {
 			buyer, err := getUserSimpleByID(tx, item.BuyerID)
 			if err != nil {
 				outputErrorMsg(w, http.StatusNotFound, "buyer not found")
-				tx.Rollback()
 				return
 			}
 			itemDetail.BuyerID = item.BuyerID
@@ -973,7 +968,6 @@ func getTransactions(w http.ResponseWriter, r *http.Request) {
 			// It's able to ignore ErrNoRows
 			log.Print(err)
 			outputErrorMsg(w, http.StatusInternalServerError, "db error")
-			tx.Rollback()
 			return
 		}
 
@@ -982,39 +976,29 @@ func getTransactions(w http.ResponseWriter, r *http.Request) {
 			err = tx.Get(&shipping, "SELECT * FROM `shippings` WHERE `transaction_evidence_id` = ?", transactionEvidence.ID)
 			if err == sql.ErrNoRows {
 				outputErrorMsg(w, http.StatusNotFound, "shipping not found")
-				tx.Rollback()
 				return
 			}
 			if err != nil {
 				log.Print(err)
 				outputErrorMsg(w, http.StatusInternalServerError, "db error")
-				tx.Rollback()
+				return
+			}
+			ssr, err := APIShipmentStatus(getShipmentServiceURL(), &APIShipmentStatusReq{
+				ReserveID: shipping.ReserveID,
+			})
+			if err != nil {
+				log.Print(err)
+				outputErrorMsg(w, http.StatusInternalServerError, "failed to request to shipment service")
 				return
 			}
 
 			itemDetail.TransactionEvidenceID = transactionEvidence.ID
 			itemDetail.TransactionEvidenceStatus = transactionEvidence.Status
-
-			wg.Add(1)
-			go func() {
-				ssr, err := APIShipmentStatus(getShipmentServiceURL(), &APIShipmentStatusReq{
-					ReserveID: shipping.ReserveID,
-				})
-				if err != nil {
-					log.Print(err)
-					outputErrorMsg(w, http.StatusInternalServerError, "failed to request to shipment service")
-					tx.Rollback()
-					return
-				}
-				itemDetail.ShippingStatus = ssr.Status
-				wg.Done()
-			}()
-
+			itemDetail.ShippingStatus = ssr.Status
 		}
+
 		itemDetails = append(itemDetails, itemDetail)
 	}
-	wg.Wait()
-	tx.Commit()
 
 	hasNext := false
 	if len(itemDetails) > TransactionsPerPage {
