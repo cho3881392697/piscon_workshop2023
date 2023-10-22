@@ -1864,6 +1864,7 @@ func postComplete(w http.ResponseWriter, r *http.Request) {
 		ssrStatus = ssr.Status
 		wg.Done()
 	}()
+	wg.Wait()
 
 	if !(ssrStatus == ShippingsStatusDone) {
 		outputErrorMsg(w, http.StatusBadRequest, "shipment service側で配送完了になっていません")
