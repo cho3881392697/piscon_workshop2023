@@ -2,7 +2,6 @@ package main
 
 import (
 	_ "net/http/pprof"
-	"sync"
 
 	crand "crypto/rand"
 	"database/sql"
@@ -922,7 +921,6 @@ func getTransactions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	itemDetails := []ItemDetail{}
-	wg := sync.WaitGroup{}
 	for _, item := range items {
 		seller, err := getUserSimpleByID(tx, item.SellerID)
 		if err != nil {
@@ -991,30 +989,24 @@ func getTransactions(w http.ResponseWriter, r *http.Request) {
 				tx.Rollback()
 				return
 			}
-			wg.Add(1)
-			go func() {
-				ssr, err := APIShipmentStatus(getShipmentServiceURL(), &APIShipmentStatusReq{
-					ReserveID: shipping.ReserveID,
-				})
-				if err != nil {
-					log.Print(err)
-					outputErrorMsg(w, http.StatusInternalServerError, "failed to request to shipment service")
-					tx.Rollback()
-					return
-				}
-				itemDetail.ShippingStatus = ssr.Status
-				wg.Done()
-			}()
+			ssr, err := APIShipmentStatus(getShipmentServiceURL(), &APIShipmentStatusReq{
+				ReserveID: shipping.ReserveID,
+			})
+			if err != nil {
+				log.Print(err)
+				outputErrorMsg(w, http.StatusInternalServerError, "failed to request to shipment service")
+				tx.Rollback()
+				return
+			}
 
 			itemDetail.TransactionEvidenceID = transactionEvidence.ID
 			itemDetail.TransactionEvidenceStatus = transactionEvidence.Status
+			itemDetail.ShippingStatus = ssr.Status
 		}
 
 		itemDetails = append(itemDetails, itemDetail)
 	}
 	tx.Commit()
-
-	wg.Wait()
 
 	hasNext := false
 	if len(itemDetails) > TransactionsPerPage {
