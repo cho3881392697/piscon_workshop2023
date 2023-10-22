@@ -1,8 +1,8 @@
 package main
 
-import _ "net/http/pprof"
-
 import (
+	_ "net/http/pprof"
+
 	crand "crypto/rand"
 	"database/sql"
 	"encoding/json"
@@ -20,6 +20,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/sessions"
 	"github.com/jmoiron/sqlx"
+
 	goji "goji.io"
 	"goji.io/pat"
 	"golang.org/x/crypto/bcrypt"
@@ -312,7 +313,7 @@ func main() {
 	}
 
 	dsn := fmt.Sprintf(
-		"%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=true&loc=Local",
+		"%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=true&loc=Local&interpolateParams=true",
 		user,
 		password,
 		host,
